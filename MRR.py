@@ -1,5 +1,6 @@
 import time, hashlib, hmac, json, os, requests, configparser, zipfile, shutil, csv
 from datetime import datetime, timedelta, date
+import numpy as np
 
 algos = ['sha256', 'sha256ab']
 ### Main functions ###
@@ -87,7 +88,7 @@ def saveMarketSnapshot():
 		print('Snapshot saved: ' + filePath)  # z.B. 2024_04_28-14_17_20.txt
 def zipDay(numberDaysBehind=1):
 	config = configparser.ConfigParser()
-	config.read('settings.ini')
+	config.read('/home/cle333/mrr/settings.ini')
 
 	for algo in algos:
 		path_data_raw = config['MRR']['path_data_raw'] + algo + '/'
@@ -156,7 +157,8 @@ def saveToFile(data, file_path):
 class MiningRigRentals:
 	def __init__(self, algo, decode=True, pretty=False, print_output=False):
 		self.config = configparser.ConfigParser()
-		self.config.read('settings.ini')
+		#self.config.read('settings.ini')
+		self.config.read('/home/cle333/mrr/settings.ini') #!!!
 
 		self.key = self.config['MRR']['key']
 		self.secret = self.config['MRR']['secret']
@@ -834,6 +836,7 @@ class Rental:
 		self.hashrate_average_eh = float(data['hashrate']['average']['hash']) / 1000 / 1000
 		self.rig = self.mrr.getRigByID(data['rig']['id'])
 		self.pricePaid = float(data['price']['paid'])
+		self.price = float(data['price_converted']['advertised']) *1000 * 1000 # !!! added
 		self.timestampStart = int(data['start_unix'])
 		self.timestampEnd = int(data['end_unix'])
 		self.rentalFinished = data['ended']
@@ -1020,18 +1023,11 @@ class Rental:
 			},
 		}'''
 		chartData = json.loads('['+result['data']['chartdata']['bars']+']')
-
-		for bar in chartData:
-			timestamp = int(bar[0])/1000
-
-			hoursTotal = (self.timestampEnd - self.timestampStart) / 60 / 60
-			hoursElapsed = (timestamp-self.timestampStart)/60/60
-			hoursRemaining = (self.timestampEnd-timestamp)/60/60
-
-			progress = hoursElapsed / hoursTotal # 0 to 1
-			alreadyPaid = progress * self.pricePaid
-			bar[1] = alreadyPaid
-		return chartData
+		chartData = [[x[0], self.price, x[1]] for x in chartData] #!!!
+		chartData = np.array(chartData)
+		sumed_hashrate = sum(chartData[:, 2])
+		chartData[:, 2] = np.cumsum(chartData[:, 2]) * (self.pricePaid / sumed_hashrate * 100000000)
+		return chartData, json.loads(result['data']['chartdata']['timestamp_start']), json.loads(result['data']['chartdata']['timestamp_end'])
 	def getPools(self):
 		result = json.loads(self.mrr.get("/rental/" + str(self.id) + '/pool'))
 		if not result['success']:
