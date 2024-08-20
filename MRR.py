@@ -1,6 +1,11 @@
 import time, hashlib, hmac, json, os, requests, configparser, zipfile, shutil, csv
 from datetime import datetime, timedelta, date
 import numpy as np
+import gzip
+import zstandard as zstd
+import io
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 algos = ['sha256', 'sha256ab']
 ### Main functions ###
@@ -88,7 +93,8 @@ def saveMarketSnapshot():
 		print('Snapshot saved: ' + filePath)  # z.B. 2024_04_28-14_17_20.txt
 def zipDay(numberDaysBehind=1):
 	config = configparser.ConfigParser()
-	config.read('/home/cle333/mrr/settings.ini')
+	#config.read('/home/cle333/mrr/settings.ini')
+	config.read('settings.ini')
 
 	for algo in algos:
 		path_data_raw = config['MRR']['path_data_raw'] + algo + '/'
@@ -97,14 +103,14 @@ def zipDay(numberDaysBehind=1):
 		if not os.path.exists(path_temp): os.makedirs(path_temp)
 
 		date_behind = datetime.now() - timedelta(days=numberDaysBehind)
-		date_behind_str = date_behind.strftime('%Y-%m-%d')
+		date_behind_str = date_behind.strftime('%Y%m%d')
 		start_of_date = int(date_behind.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 		end_of_date = int(date_behind.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp())
 
 		full_day_filename = f"{date_behind_str}.json"
 		tempFile = full_day_filename
 
-		zip_filename = f"{date_behind_str}.zip"
+		zip_filename = f"{date_behind_str}.zstd"
 		zip_file_path = path_data_compressed + zip_filename
 
 		data = {}
@@ -114,20 +120,18 @@ def zipDay(numberDaysBehind=1):
 			for filename in os.listdir(path_data_raw):
 				if filename.endswith(".json") and filename[:-5].isdigit():
 					timestamp = int(filename[:-5])
-
 					if start_of_date <= timestamp <= end_of_date:
 						with open(os.path.join(path_data_raw, filename), 'r') as file:
 							data[str(timestamp)] = json.load(file)
 
 			# create ZIP from data
 			if len(data) > 0:
-				with open(tempFile, 'w') as file: # Write data to json file
-					json.dump(data, file, indent=4)
+				with open(zip_file_path, 'wb') as file_output:
+				    cctx = zstd.ZstdCompressor()
+				    with cctx.stream_writer(file_output) as compressor:
+				        json_string = json.dumps(data)
+				        compressor.write(json_string.encode('utf-8'))
 
-				with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zfile:
-					zfile.write(tempFile, arcname=full_day_filename)
-
-				os.remove(tempFile)
 			else:
 				print(algo + " - No files found for yesterday")
 
@@ -157,8 +161,8 @@ def saveToFile(data, file_path):
 class MiningRigRentals:
 	def __init__(self, algo, decode=True, pretty=False, print_output=False):
 		self.config = configparser.ConfigParser()
-		#self.config.read('settings.ini')
-		self.config.read('/home/cle333/mrr/settings.ini') #!!!
+		self.config.read('settings.ini')
+		#self.config.read('/home/cle333/mrr/settings.ini') #!!!
 
 		self.key = self.config['MRR']['key']
 		self.secret = self.config['MRR']['secret']
