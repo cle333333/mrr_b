@@ -9,18 +9,26 @@ if __name__ == "__main__":
 	### Anleitung für Setup & Verwendung ###
 	########################################
 
-	zipDay(1)
-
+	while True:
+		try:
+			saveMarketSnapshot()
+		except Exception as e:
+			print(f"An error occurred: {e}")
+		finally:
+			print('Sleeping 300s...')
+			time.sleep(300)
 	exit()
-
-	#saveMarketSnapshot()
 
 	mrr = MiningRigRentals("sha256ab", decode=False, pretty=True, print_output=False) # MRR Objekt erstellen
 
 	day = 1
 	#day = (date.today() - date(2024, 6, 7)).days  # Setting a fixed date for debugging / testing.
-	getProfitForRentingAllHashrate(mrr, day, 15)
-	exportDailyProfits(mrr, day) #csv export
+
+	with open('20240607.json', 'r') as file:
+		data = json.load(file) #load raw data for testing
+
+	getProfitForRentingAllHashrate(mrr, data, 15, True)
+	exportDailyProfits(mrr, data, True) #csv export
 
 
 	exit()
